@@ -1,7 +1,6 @@
+import { redirect } from 'next/navigation'
+
 export default function Home() {
-  return (
-    <main>
-      <h1>Partner Dashboard</h1>
-    </main>
-  )
+  // For now, send partners straight to the main dashboard overview.
+  redirect('/dashboard')
 }
