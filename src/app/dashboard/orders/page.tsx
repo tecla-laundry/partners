@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -15,10 +15,11 @@ import {
 } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
 import { OrderDetailDrawer } from '@/components/orders/order-detail-drawer'
-import { createClient } from '@/lib/supabase'
+import { createClient, callEdgeFunction } from '@/lib/supabase'
 import { Order, OrderStatus } from '@/lib/types'
 import { format } from 'date-fns'
-import { Eye } from 'lucide-react'
+import { Eye, CheckCircle2 } from 'lucide-react'
+import { toast } from 'sonner'
 
 const statusTabs: Record<string, OrderStatus[]> = {
   'new-requests': ['laundry_requested'],
@@ -80,7 +81,9 @@ export default function OrdersPage() {
   const [selectedTab, setSelectedTab] = useState('new-requests')
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [acceptingOrderId, setAcceptingOrderId] = useState<string | null>(null)
   const supabase = createClient()
+  const queryClient = useQueryClient()
 
   const statuses = statusTabs[selectedTab] || []
 
@@ -88,6 +91,20 @@ export default function OrdersPage() {
     queryKey: ['orders', selectedTab, statuses],
     queryFn: () => fetchOrders(supabase, statuses),
   })
+
+  const handleAcceptOrder = async (order: Order) => {
+    if (order.status !== 'laundry_requested') return
+    setAcceptingOrderId(order.id)
+    try {
+      await callEdgeFunction('accept_order', { order_id: order.id })
+      toast.success('Order accepted')
+      await queryClient.invalidateQueries({ queryKey: ['orders'] })
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to accept order')
+    } finally {
+      setAcceptingOrderId(null)
+    }
+  }
 
   // Real-time subscription for new orders and status changes
   useEffect(() => {
@@ -204,7 +221,7 @@ export default function OrdersPage() {
                         <TableCell>
                           <div>
                             <p className="font-medium">
-                              {order.customer?.full_name || 'N/A'}
+                              {order.customer?.full_name || order.customer?.email || 'N/A'}
                             </p>
                             <p className="text-sm text-muted-foreground">
                               {order.customer?.email}
@@ -222,14 +239,26 @@ export default function OrdersPage() {
                           {format(new Date(order.created_at), 'MMM d, yyyy')}
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleOrderClick(order)}
-                          >
-                            <Eye className="h-4 w-4 mr-2" />
-                            View
-                          </Button>
+                          <div className="flex items-center justify-end gap-2">
+                            {order.status === 'laundry_requested' && (
+                              <Button
+                                size="sm"
+                                onClick={() => handleAcceptOrder(order)}
+                                disabled={acceptingOrderId === order.id}
+                              >
+                                <CheckCircle2 className="h-4 w-4 mr-2" />
+                                {acceptingOrderId === order.id ? 'Accepting…' : 'Accept'}
+                              </Button>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleOrderClick(order)}
+                            >
+                              <Eye className="h-4 w-4 mr-2" />
+                              View
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}

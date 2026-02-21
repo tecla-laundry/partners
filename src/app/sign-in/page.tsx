@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Sparkles, Loader2 } from 'lucide-react'
+import { Sparkles, Loader2, Eye, EyeOff } from 'lucide-react'
 
 const signInSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -24,6 +24,7 @@ type SignInFormValues = z.infer<typeof signInSchema>
 export default function SignInPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
   const { supabase, refreshSession } = useAuth()
 
   const form = useForm<SignInFormValues>({
@@ -107,13 +108,28 @@ export default function SignInPage() {
 
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="••••••••"
-                {...form.register('password')}
-                disabled={loading}
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="••••••••"
+                  {...form.register('password')}
+                  disabled={loading}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((p) => !p)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
               {form.formState.errors.password && (
                 <p className="text-sm text-destructive">
                   {form.formState.errors.password.message}
