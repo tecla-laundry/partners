@@ -92,6 +92,8 @@ export default function OrdersPage() {
     queryFn: () => fetchOrders(supabase, statuses),
   })
 
+  console.log("ORDERS", orders)
+
   const handleAcceptOrder = async (order: Order) => {
     if (order.status !== 'laundry_requested') return
     setAcceptingOrderId(order.id)
