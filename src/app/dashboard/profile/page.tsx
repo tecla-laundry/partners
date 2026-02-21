@@ -135,9 +135,9 @@ export default function ProfilePage() {
       newData.latitude !== originalData.latitude ||
       newData.longitude !== originalData.longitude
 
-    const servicesChanged =
-      JSON.stringify(newData.services_offered?.sort()) !==
-      JSON.stringify(originalData.services_offered?.sort())
+    const newServices = Array.isArray(newData.services_offered) ? [...newData.services_offered].sort() : []
+    const origServices = Array.isArray(originalData.services_offered) ? [...originalData.services_offered].sort() : []
+    const servicesChanged = JSON.stringify(newServices) !== JSON.stringify(origServices)
 
     return addressChanged || servicesChanged
   }
@@ -189,7 +189,7 @@ export default function ProfilePage() {
       })
 
       serviceForm.reset({
-        services_offered: laundry.services_offered || [],
+        services_offered: Array.isArray(laundry.services_offered) ? laundry.services_offered : [],
         price_per_kg: Number(laundry.price_per_kg) || 0,
         capacity_per_day: laundry.capacity_per_day || 0,
         operating_hours: laundry.operating_hours || {},
@@ -506,15 +506,19 @@ export default function ProfilePage() {
                       <div key={service.id} className="flex items-center space-x-2">
                         <Checkbox
                           id={service.id}
-                          checked={serviceForm.watch('services_offered').includes(service.id)}
+                          checked={(Array.isArray(serviceForm.watch('services_offered'))
+                            ? serviceForm.watch('services_offered')
+                            : []
+                          ).includes(service.id)}
                           onCheckedChange={(checked) => {
                             const current = serviceForm.getValues('services_offered')
+                            const list = Array.isArray(current) ? current : []
                             if (checked) {
-                              serviceForm.setValue('services_offered', [...current, service.id])
+                              serviceForm.setValue('services_offered', [...list, service.id])
                             } else {
                               serviceForm.setValue(
                                 'services_offered',
-                                current.filter((s) => s !== service.id)
+                                list.filter((s) => s !== service.id)
                               )
                             }
                           }}
