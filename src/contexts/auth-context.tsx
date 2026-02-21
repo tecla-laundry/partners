@@ -49,12 +49,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshingRef = useRef(false)
 
   const refreshSession = async (session?: Session | null) => {
-    console.log('refreshing session', session)
     if (refreshingRef.current) return
     refreshingRef.current = true
 
     try {
-      // Use provided session if available (prevents extra round trip)
       const nextUser = session?.user ?? (await supabase.auth.getUser()).data.user ?? null
       setUser(nextUser)
 
@@ -78,26 +76,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
-    
-    console.log('hydrating auth state')
+    // Hydrate once on mount from Supabase (single getSession)
     supabase.auth
       .getSession()
       .then(({ data }) => refreshSession(data.session))
       .catch(() => setLoading(false))
 
+    // Supabase handles session; we only sync auth state to React when it changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('auth state changed', event, session)
+    } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
         setUser(null)
         setProfile(null)
         setLoading(false)
         return
       }
-
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
-        setLoading(false)
+      if (session && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED')) {
+        refreshSession(session)
       }
     })
 

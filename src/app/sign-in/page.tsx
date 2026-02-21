@@ -48,8 +48,8 @@ export default function SignInPage() {
         throw new Error('Failed to sign in')
       }
 
-      // Ensure client auth context is hydrated immediately
-      
+      // Sync session to auth context before navigating so dashboard sees user immediately
+      await refreshSession(data.session)
 
       // Check if user has completed onboarding
       const { data: laundry } = await supabase
