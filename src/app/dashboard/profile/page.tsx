@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Image from 'next/image'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -304,9 +305,25 @@ export default function ProfilePage() {
 
   return (
     <div className="space-y-6">
+      {/* Profile header with cover — Unsplash: happy laundry owner / clean store */}
+      <div className="relative h-32 md:h-40 rounded-2xl overflow-hidden bg-muted">
+        <Image
+          src="https://images.unsplash.com/photo-1563453392212-326f5e854473?w=1200&q=80"
+          alt=""
+          fill
+          className="object-cover"
+          sizes="(max-width: 768px) 100vw, 1200px"
+        />
+        <div className="absolute inset-0 bg-navy-900/20" />
+        <div className="absolute bottom-4 left-4">
+          <h1 className="text-xl font-bold text-white drop-shadow-md">{laundry.business_name}</h1>
+          <p className="text-sm text-white/90">Profile & Settings</p>
+        </div>
+      </div>
+
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Profile & Settings</h1>
+          <h2 className="text-2xl font-bold tracking-tight">Business details</h2>
           <p className="text-sm text-muted-foreground">
             Manage your laundry details, services, pricing, and payout information.
           </p>

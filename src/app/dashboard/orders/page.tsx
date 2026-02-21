@@ -136,7 +136,7 @@ export default function OrdersPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Orders</h1>
         <p className="text-sm text-muted-foreground">
@@ -145,30 +145,30 @@ export default function OrdersPage() {
       </div>
 
       <Tabs value={selectedTab} onValueChange={setSelectedTab}>
-        <TabsList>
-          <TabsTrigger value="new-requests">New Requests</TabsTrigger>
-          <TabsTrigger value="accepted">Accepted</TabsTrigger>
-          <TabsTrigger value="in-progress">In Progress</TabsTrigger>
-          <TabsTrigger value="ready">Ready</TabsTrigger>
-          <TabsTrigger value="completed">Completed</TabsTrigger>
-          <TabsTrigger value="disputed">Disputed</TabsTrigger>
+        <TabsList className="rounded-xl bg-muted/50 p-1">
+          <TabsTrigger value="new-requests" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">New Requests</TabsTrigger>
+          <TabsTrigger value="accepted" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">Accepted</TabsTrigger>
+          <TabsTrigger value="in-progress" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">In Progress</TabsTrigger>
+          <TabsTrigger value="ready" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">Ready</TabsTrigger>
+          <TabsTrigger value="completed" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">Completed</TabsTrigger>
+          <TabsTrigger value="disputed" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">Disputed</TabsTrigger>
         </TabsList>
 
-        <TabsContent value={selectedTab} className="mt-4">
+        <TabsContent value={selectedTab} className="mt-6">
           {isLoading ? (
-            <Card>
+            <Card className="rounded-xl">
               <CardContent className="py-8 text-center text-muted-foreground">
                 Loading orders...
               </CardContent>
             </Card>
           ) : orders.length === 0 ? (
-            <Card>
+            <Card className="rounded-xl">
               <CardContent className="py-8 text-center text-muted-foreground">
                 No orders found in this category.
               </CardContent>
             </Card>
           ) : (
-            <Card>
+            <Card className="rounded-xl overflow-hidden">
               <CardHeader>
                 <CardTitle>
                   {orders.length} {orders.length === 1 ? 'Order' : 'Orders'}
@@ -197,7 +197,7 @@ export default function OrdersPage() {
                   </TableHeader>
                   <TableBody>
                     {orders.map((order) => (
-                      <TableRow key={order.id}>
+                      <TableRow key={order.id} className="transition-colors hover:bg-muted/50">
                         <TableCell className="font-mono text-xs">
                           {order.id.slice(0, 8)}
                         </TableCell>

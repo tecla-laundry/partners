@@ -223,7 +223,7 @@ export default function CapacityPage() {
       </div>
 
       {/* Today's Capacity Meter */}
-      <Card>
+      <Card className="rounded-xl">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <TrendingUp className="h-5 w-5" />
@@ -273,7 +273,7 @@ export default function CapacityPage() {
       </Card>
 
       {/* Set Daily Capacity */}
-      <Card>
+      <Card className="rounded-xl">
         <CardHeader>
           <CardTitle>Set Daily Capacity</CardTitle>
           <CardDescription>
@@ -312,7 +312,7 @@ export default function CapacityPage() {
       </Card>
 
       {/* Calendar View */}
-      <Card>
+      <Card className="rounded-xl">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Calendar className="h-5 w-5" />

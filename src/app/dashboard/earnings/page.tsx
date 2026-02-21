@@ -251,7 +251,7 @@ export default function EarningsPage() {
       {/* Summary Cards */}
       {summary && (
         <div className="grid gap-4 md:grid-cols-4">
-          <Card>
+          <Card className="rounded-xl">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
               <DollarSign className="h-4 w-4 text-muted-foreground" />
@@ -264,7 +264,7 @@ export default function EarningsPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="rounded-xl">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Your Earnings</CardTitle>
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
@@ -275,7 +275,7 @@ export default function EarningsPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="rounded-xl">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Commission</CardTitle>
               <DollarSign className="h-4 w-4 text-muted-foreground" />
@@ -286,7 +286,7 @@ export default function EarningsPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="rounded-xl">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Orders</CardTitle>
               <Calendar className="h-4 w-4 text-muted-foreground" />
@@ -323,8 +323,8 @@ export default function EarningsPage() {
                       <YAxis />
                       <Tooltip />
                       <Legend />
-                      <Line type="monotone" dataKey="revenue" stroke="#0088FE" strokeWidth={2} />
-                      <Line type="monotone" dataKey="payout" stroke="#00C49F" strokeWidth={2} />
+                      <Line type="monotone" dataKey="revenue" stroke="hsl(var(--primary))" strokeWidth={2} />
+                      <Line type="monotone" dataKey="payout" stroke="#059669" strokeWidth={2} />
                     </LineChart>
                   </ResponsiveContainer>
                 </CardContent>
@@ -343,8 +343,8 @@ export default function EarningsPage() {
                       <YAxis />
                       <Tooltip />
                       <Legend />
-                      <Bar dataKey="payout" fill="#00C49F" name="Your Earnings" />
-                      <Bar dataKey="commission" fill="#FF8042" name="Commission" />
+                      <Bar dataKey="payout" fill="hsl(var(--primary))" name="Your Earnings" />
+                      <Bar dataKey="commission" fill="#64748B" name="Commission" />
                     </BarChart>
                   </ResponsiveContainer>
                 </CardContent>
