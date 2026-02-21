@@ -245,7 +245,7 @@ export function OrderDetailDrawer({
                         <p className="text-sm text-muted-foreground">{item.description}</p>
                       )}
                     </div>
-                    <p className="font-medium">${item.total_price.toFixed(2)}</p>
+                    <p className="font-medium">R{item.total_price.toFixed(2)}</p>
                   </div>
                 ))}
                 <div className="flex justify-between pt-2 border-t font-semibold">
@@ -254,7 +254,7 @@ export function OrderDetailDrawer({
                 </div>
                 <div className="flex justify-between font-semibold">
                   <span>Total Price:</span>
-                  <span>${order.total_price.toFixed(2)}</span>
+                  <span>R{order.total_price.toFixed(2)}</span>
                 </div>
               </div>
             </CardContent>

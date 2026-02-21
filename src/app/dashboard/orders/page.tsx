@@ -59,7 +59,7 @@ async function fetchOrders(
     .select(
       `
       *,
-      customer:profiles!customer_id(full_name, email, phone),
+      customer:profiles!orders_customer_id_fkey(full_name, email, phone),
       order_items(*),
       deliveries(*, driver:drivers(id, profile:profiles!user_id(full_name, email, phone))),
       order_status_history(*)
@@ -231,7 +231,7 @@ export default function OrdersPage() {
                           </div>
                         </TableCell>
                         <TableCell>{order.total_weight_kg} kg</TableCell>
-                        <TableCell>${order.total_price.toFixed(2)}</TableCell>
+                        <TableCell>R{order.total_price.toFixed(2)}</TableCell>
                         <TableCell>
                           <Badge variant={getStatusBadgeVariant(order.status)}>
                             {order.status.replace(/_/g, ' ')}
