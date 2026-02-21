@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard,
   ShoppingBag,
@@ -14,6 +14,8 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { toast } from 'sonner'
+import { useAuth } from '@/contexts/auth-context'
 
 const navigation = [
   { name: 'Overview', href: '/dashboard', icon: LayoutDashboard },
@@ -27,10 +29,18 @@ const navigation = [
 
 export function Sidebar() {
   const pathname = usePathname()
+  const router = useRouter()
+  const { signOut } = useAuth()
 
-  // TODO: wire to Supabase auth for laundry_owner sign-out
   const handleSignOut = async () => {
-    // placeholder
+    try {
+      await signOut()
+      toast.success('Signed out successfully')
+      router.push('/')
+      router.refresh()
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to sign out')
+    }
   }
 
   return (
