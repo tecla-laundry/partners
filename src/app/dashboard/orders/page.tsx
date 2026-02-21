@@ -59,9 +59,9 @@ async function fetchOrders(
     .select(
       `
       *,
-      customer:profiles!orders_customer_id_fkey(full_name, email, phone),
+      customer:profiles!customer_id(full_name, email, phone),
       order_items(*),
-      deliveries(*, driver:drivers(id, profile:profiles(full_name, email, phone))),
+      deliveries(*, driver:drivers(id, profile:profiles!user_id(full_name, email, phone))),
       order_status_history(*)
     `
     )
