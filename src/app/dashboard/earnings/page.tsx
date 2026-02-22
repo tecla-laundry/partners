@@ -19,8 +19,6 @@ import {
 import {
   LineChart,
   Line,
-  BarChart,
-  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -49,6 +47,16 @@ async function fetchLaundryId(
   return data.id
 }
 
+type EarningRow = {
+  id: string
+  order_id: string
+  amount: number
+  description: string | null
+  paid: boolean
+  paid_at: string | null
+  created_at: string
+}
+
 async function fetchEarnings(
   supabase: ReturnType<typeof import('@/lib/supabase').createClient>,
   laundryId: string,
@@ -59,36 +67,17 @@ async function fetchEarnings(
     period === 'week' ? startOfWeek(subDays(now, 7)) : startOfMonth(subDays(now, 30))
   const endDate = period === 'week' ? endOfWeek(now) : endOfMonth(now)
 
-  // Fetch payments for completed orders
-  const { data: payments, error } = await supabase
-    .from('payments')
-    .select(
-      `
-      id,
-      amount,
-      laundry_payout_amount,
-      commission_amount,
-      platform_fee,
-      created_at,
-      paid_at,
-      released_at,
-      orders!inner(
-        id,
-        total_price,
-        created_at,
-        completed_at
-      )
-    `
-    )
-    .eq('orders.laundry_id', laundryId)
-    .eq('status', 'completed')
-    .eq('escrow_status', 'released')
+  const { data, error } = await supabase
+    .from('earnings')
+    .select('id, order_id, amount, description, paid, paid_at, created_at')
+    .eq('recipient_type', 'laundry')
+    .eq('recipient_id', laundryId)
     .gte('created_at', startDate.toISOString())
     .lte('created_at', endDate.toISOString())
     .order('created_at', { ascending: false })
 
   if (error) throw error
-  return payments || []
+  return (data || []) as EarningRow[]
 }
 
 async function fetchPayouts(
@@ -144,47 +133,32 @@ export default function EarningsPage() {
   const summary = useMemo(() => {
     if (!earnings) return null
 
-    const totalRevenue = earnings.reduce((sum, p) => sum + Number(p.amount || 0), 0)
-    const totalPayout = earnings.reduce(
-      (sum, p) => sum + Number(p.laundry_payout_amount || 0),
-      0
-    )
-    const totalCommission = earnings.reduce(
-      (sum, p) => sum + Number(p.commission_amount || 0) + Number(p.platform_fee || 0),
-      0
-    )
+    const totalEarnings = earnings.reduce((sum, e) => sum + Number(e.amount || 0), 0)
+    const unpaidTotal = earnings.filter((e) => !e.paid).reduce((sum, e) => sum + Number(e.amount || 0), 0)
+    const paidTotal = earnings.filter((e) => e.paid).reduce((sum, e) => sum + Number(e.amount || 0), 0)
+    const orderCount = new Set(earnings.map((e) => e.order_id)).size
 
     return {
-      totalRevenue,
-      totalPayout,
-      totalCommission,
-      orderCount: earnings.length,
+      totalEarnings,
+      unpaidTotal,
+      paidTotal,
+      orderCount,
     }
   }, [earnings])
 
   const chartData = useMemo(() => {
     if (!earnings) return []
 
-    const grouped: Record<string, { revenue: number; payout: number; commission: number }> = {}
+    const grouped: Record<string, { earnings: number }> = {}
 
-    earnings.forEach((payment) => {
-      const date = format(new Date(payment.created_at), 'MMM dd')
-      if (!grouped[date]) {
-        grouped[date] = { revenue: 0, payout: 0, commission: 0 }
-      }
-      grouped[date].revenue += Number(payment.amount || 0)
-      grouped[date].payout += Number(payment.laundry_payout_amount || 0)
-      grouped[date].commission +=
-        Number(payment.commission_amount || 0) + Number(payment.platform_fee || 0)
+    earnings.forEach((e) => {
+      const date = format(new Date(e.created_at), 'MMM dd')
+      if (!grouped[date]) grouped[date] = { earnings: 0 }
+      grouped[date].earnings += Number(e.amount || 0)
     })
 
     return Object.entries(grouped)
-      .map(([date, values]) => ({
-        date,
-        revenue: values.revenue,
-        payout: values.payout,
-        commission: values.commission,
-      }))
+      .map(([date, values]) => ({ date, earnings: values.earnings }))
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
   }, [earnings])
 
@@ -194,20 +168,15 @@ export default function EarningsPage() {
       return
     }
 
-    const headers = ['Date', 'Order ID', 'Revenue', 'Your Payout', 'Commission', 'Status']
-    const rows = earnings.map((payment) => {
-      const order = Array.isArray(payment.orders) ? payment.orders[0] : payment.orders
-      return [
-      format(new Date(payment.created_at), 'yyyy-MM-dd'),
-      order?.id?.slice(0, 8) || 'N/A',
-      Number(payment.amount || 0).toFixed(2),
-      Number(payment.laundry_payout_amount || 0).toFixed(2),
-      (
-        Number(payment.commission_amount || 0) + Number(payment.platform_fee || 0)
-      ).toFixed(2),
-      'Completed',
-      ]
-    })
+    const headers = ['Date', 'Order ID', 'Amount', 'Description', 'Paid', 'Paid at']
+    const rows = earnings.map((e) => [
+      format(new Date(e.created_at), 'yyyy-MM-dd'),
+      e.order_id?.slice(0, 8) || 'N/A',
+      Number(e.amount || 0).toFixed(2),
+      e.description || '',
+      e.paid ? 'Yes' : 'No',
+      e.paid_at ? format(new Date(e.paid_at), 'yyyy-MM-dd') : '',
+    ])
 
     const csvContent = [headers.join(','), ...rows.map((row) => row.join(','))].join('\n')
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
@@ -253,11 +222,11 @@ export default function EarningsPage() {
         <div className="grid gap-4 md:grid-cols-4">
           <Card className="rounded-xl">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+              <CardTitle className="text-sm font-medium">Total Earnings</CardTitle>
               <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">R{summary.totalRevenue.toFixed(2)}</div>
+              <div className="text-2xl font-bold">R{summary.totalEarnings.toFixed(2)}</div>
               <p className="text-xs text-muted-foreground">
                 {period === 'week' ? 'This week' : 'This month'}
               </p>
@@ -266,23 +235,23 @@ export default function EarningsPage() {
 
           <Card className="rounded-xl">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Your Earnings</CardTitle>
+              <CardTitle className="text-sm font-medium">Unpaid</CardTitle>
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">R{summary.totalPayout.toFixed(2)}</div>
-              <p className="text-xs text-muted-foreground">After commission</p>
+              <div className="text-2xl font-bold">R{summary.unpaidTotal.toFixed(2)}</div>
+              <p className="text-xs text-muted-foreground">Pending payout</p>
             </CardContent>
           </Card>
 
           <Card className="rounded-xl">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Commission</CardTitle>
+              <CardTitle className="text-sm font-medium">Paid</CardTitle>
               <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">R{summary.totalCommission.toFixed(2)}</div>
-              <p className="text-xs text-muted-foreground">Platform fees</p>
+              <div className="text-2xl font-bold">R{summary.paidTotal.toFixed(2)}</div>
+              <p className="text-xs text-muted-foreground">Already paid out</p>
             </CardContent>
           </Card>
 
@@ -309,54 +278,31 @@ export default function EarningsPage() {
         <TabsContent value={period} className="space-y-4">
           {/* Charts */}
           {chartData.length > 0 && (
-            <div className="grid gap-4 md:grid-cols-2">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Revenue Trend</CardTitle>
-                  <CardDescription>Daily revenue breakdown</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <LineChart data={chartData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="date" />
-                      <YAxis />
-                      <Tooltip />
-                      <Legend />
-                      <Line type="monotone" dataKey="revenue" stroke="hsl(var(--primary))" strokeWidth={2} />
-                      <Line type="monotone" dataKey="payout" stroke="#059669" strokeWidth={2} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Commission Breakdown</CardTitle>
-                  <CardDescription>Platform fees and commissions</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={chartData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="date" />
-                      <YAxis />
-                      <Tooltip />
-                      <Legend />
-                      <Bar dataKey="payout" fill="hsl(var(--primary))" name="Your Earnings" />
-                      <Bar dataKey="commission" fill="#64748B" name="Commission" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-            </div>
+            <Card>
+              <CardHeader>
+                <CardTitle>Earnings trend</CardTitle>
+                <CardDescription>Daily earnings (laundry share)</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="date" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Line type="monotone" dataKey="earnings" stroke="hsl(var(--primary))" strokeWidth={2} name="Earnings" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
           )}
 
           {/* Earnings Table */}
           <Card>
             <CardHeader>
-              <CardTitle>Earnings Breakdown</CardTitle>
-              <CardDescription>Detailed breakdown of your earnings</CardDescription>
+              <CardTitle>Earnings</CardTitle>
+              <CardDescription>Per-order laundry share (from earnings table)</CardDescription>
             </CardHeader>
             <CardContent>
               {loadingEarnings ? (
@@ -373,42 +319,35 @@ export default function EarningsPage() {
                     <TableRow>
                       <TableHead>Date</TableHead>
                       <TableHead>Order ID</TableHead>
-                      <TableHead>Total Revenue</TableHead>
-                      <TableHead>Your Payout</TableHead>
-                      <TableHead>Commission</TableHead>
-                      <TableHead>Status</TableHead>
+                      <TableHead>Amount</TableHead>
+                      <TableHead>Description</TableHead>
+                      <TableHead>Paid</TableHead>
+                      <TableHead>Paid at</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {earnings.map((payment) => {
-                      // Supabase typed joins can return arrays depending on schema/typegen
-                      const order = Array.isArray(payment.orders) ? payment.orders[0] : payment.orders
-
-                      return (
-                        <TableRow key={payment.id}>
-                          <TableCell>
-                            {format(new Date(payment.created_at), 'MMM dd, yyyy')}
-                          </TableCell>
-                          <TableCell className="font-mono text-xs">
-                            {order?.id?.slice(0, 8)}...
-                          </TableCell>
-                          <TableCell>R{Number(payment.amount || 0).toFixed(2)}</TableCell>
-                          <TableCell className="font-medium">
-                            R{Number(payment.laundry_payout_amount || 0).toFixed(2)}
-                          </TableCell>
-                          <TableCell className="text-destructive">
-                            -R
-                            {(
-                              Number(payment.commission_amount || 0) +
-                              Number(payment.platform_fee || 0)
-                            ).toFixed(2)}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="default">Completed</Badge>
-                          </TableCell>
-                        </TableRow>
-                      )
-                    })}
+                    {earnings.map((e) => (
+                      <TableRow key={e.id}>
+                        <TableCell>
+                          {format(new Date(e.created_at), 'MMM dd, yyyy')}
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">
+                          {e.order_id?.slice(0, 8)}...
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          R{Number(e.amount || 0).toFixed(2)}
+                        </TableCell>
+                        <TableCell>{e.description ?? '—'}</TableCell>
+                        <TableCell>
+                          <Badge variant={e.paid ? 'default' : 'secondary'}>
+                            {e.paid ? 'Paid' : 'Unpaid'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {e.paid_at ? format(new Date(e.paid_at), 'MMM dd, yyyy') : '—'}
+                        </TableCell>
+                      </TableRow>
+                    ))}
                   </TableBody>
                 </Table>
               )}
