@@ -87,6 +87,41 @@ async function fetchReviews(
   return (data || []) as ReviewRow[]
 }
 
+type CustomerReviewRow = {
+  id: string
+  order_id: string
+  laundry_id: string
+  customer_id: string
+  rating: number
+  comment: string | null
+  created_at: string
+  profiles?: { full_name: string | null; email: string | null } | { full_name: string | null; email: string | null }[]
+}
+
+async function fetchCustomerReviews(
+  supabase: ReturnType<typeof import('@/lib/supabase').createClient>,
+  laundryId: string
+): Promise<CustomerReviewRow[]> {
+  const { data, error } = await supabase
+    .from('customer_reviews')
+    .select(
+      `
+      id,
+      order_id,
+      laundry_id,
+      customer_id,
+      rating,
+      comment,
+      created_at,
+      profiles!customer_reviews_customer_id_fkey ( full_name, email )
+    `
+    )
+    .eq('laundry_id', laundryId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return (data || []) as CustomerReviewRow[]
+}
+
 function normalizeProfile(
   v: { full_name: string | null; email: string | null } | { full_name: string | null; email: string | null }[] | undefined
 ): { full_name: string | null; email: string | null } | null {
@@ -109,6 +144,12 @@ export default function ReviewsPage() {
   const { data: reviews, isLoading: loadingReviews } = useQuery({
     queryKey: ['reviews', laundryId],
     queryFn: () => fetchReviews(supabase, laundryId!),
+    enabled: !!laundryId,
+  })
+
+  const { data: customerReviews, isLoading: loadingCustomerReviews } = useQuery({
+    queryKey: ['customer-reviews', laundryId],
+    queryFn: () => fetchCustomerReviews(supabase, laundryId!),
     enabled: !!laundryId,
   })
 
@@ -148,13 +189,14 @@ export default function ReviewsPage() {
   }
 
   const isLoading = loadingId || loadingReviews
+  const isLoadingCustomerReviews = loadingId || loadingCustomerReviews
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Ratings & Reviews</h1>
         <p className="text-sm text-muted-foreground">
-          See what customers are saying about your laundry and respond to reviews.
+          See what customers are saying about your laundry, respond to reviews, and view ratings you gave to customers.
         </p>
       </div>
 
@@ -238,6 +280,75 @@ export default function ReviewsPage() {
                             <MessageSquare className="h-3.5 w-3.5" />
                             {row.partner_response ? 'Edit response' : 'Respond'}
                           </Button>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Reviews you gave to customers</CardTitle>
+          <CardDescription>
+            Ratings you left for customers after completed orders. Laundries can rate customers; drivers do not rate.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isLoadingCustomerReviews ? (
+            <div className="flex items-center justify-center py-12 text-muted-foreground">
+              <Loader2 className="h-6 w-6 animate-spin" />
+            </div>
+          ) : !customerReviews?.length ? (
+            <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+              No customer ratings yet. You can rate a customer from a completed order (one rating per order).
+            </div>
+          ) : (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Rating</TableHead>
+                    <TableHead>Customer</TableHead>
+                    <TableHead>Comment</TableHead>
+                    <TableHead>Date</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {customerReviews.map((row) => {
+                    const customer = normalizeProfile(row.profiles)
+                    const label = customer?.full_name || customer?.email || 'Customer'
+                    return (
+                      <TableRow key={row.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            {[1, 2, 3, 4, 5].map((s) => (
+                              <Star
+                                key={s}
+                                className={`h-4 w-4 ${
+                                  s <= row.rating
+                                    ? 'fill-amber-400 text-amber-400'
+                                    : 'text-muted'
+                                }`}
+                              />
+                            ))}
+                            <span className="ml-1 text-sm font-medium">{row.rating}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="max-w-[200px] truncate" title={label}>
+                          {label}
+                        </TableCell>
+                        <TableCell className="max-w-[320px]">
+                          <span className="line-clamp-2 text-sm">
+                            {row.comment || '—'}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
+                          {format(new Date(row.created_at), 'MMM d, yyyy')}
                         </TableCell>
                       </TableRow>
                     )

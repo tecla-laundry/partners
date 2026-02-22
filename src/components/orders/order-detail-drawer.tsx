@@ -11,6 +11,8 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import {
   MapPin,
   Clock,
@@ -23,12 +25,15 @@ import {
   RefreshCw,
   CheckCircle2,
   XCircle,
+  Star,
+  Loader2,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { Order, OrderStatus } from '@/lib/types'
 import { createClient } from '@/lib/supabase'
 import { toast } from 'sonner'
 import { callEdgeFunction } from '@/lib/supabase'
+import { useQueryClient } from '@tanstack/react-query'
 
 interface OrderDetailDrawerProps {
   order: Order | null
@@ -45,6 +50,11 @@ export function OrderDetailDrawer({
 }: OrderDetailDrawerProps) {
   const [loading, setLoading] = useState(false)
   const [realtimeDelivery, setRealtimeDelivery] = useState<any>(null)
+  const [customerRating, setCustomerRating] = useState(0)
+  const [customerComment, setCustomerComment] = useState('')
+  const [existingCustomerReview, setExistingCustomerReview] = useState<{ rating: number; comment: string | null } | null>(null)
+  const [submittingCustomerReview, setSubmittingCustomerReview] = useState(false)
+  const queryClient = useQueryClient()
 
   useEffect(() => {
     if (!order || !open) return
@@ -83,6 +93,49 @@ export function OrderDetailDrawer({
       supabase.removeChannel(deliveryChannel)
     }
   }, [order, open])
+
+  // Fetch existing customer review when drawer opens for a completed order
+  useEffect(() => {
+    if (!order || order.status !== 'completed' || !open) {
+      setExistingCustomerReview(null)
+      return
+    }
+    const supabase = createClient()
+    supabase
+      .from('customer_reviews')
+      .select('rating, comment')
+      .eq('order_id', order.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        setExistingCustomerReview(data ? { rating: data.rating, comment: data.comment } : null)
+      })
+  }, [order?.id, order?.status, open])
+
+  const handleSubmitCustomerReview = async () => {
+    if (!order || customerRating < 1 || submittingCustomerReview) return
+    setSubmittingCustomerReview(true)
+    const supabase = createClient()
+    try {
+      const { error } = await supabase.from('customer_reviews').insert({
+        order_id: order.id,
+        laundry_id: order.laundry_id,
+        customer_id: order.customer_id,
+        rating: customerRating,
+        comment: customerComment.trim() || null,
+      })
+      if (error) throw error
+      toast.success('Customer rating submitted')
+      setExistingCustomerReview({ rating: customerRating, comment: customerComment.trim() || null })
+      setCustomerRating(0)
+      setCustomerComment('')
+      queryClient.invalidateQueries({ queryKey: ['customer-reviews'] })
+      queryClient.invalidateQueries({ queryKey: ['reviews'] })
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to submit rating')
+    } finally {
+      setSubmittingCustomerReview(false)
+    }
+  }
 
   const handleAccept = async () => {
     if (!order) return
@@ -378,6 +431,78 @@ export function OrderDetailDrawer({
                       </div>
                     ))}
                 </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Rate customer (completed orders only) */}
+          {order.status === 'completed' && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Star className="h-4 w-4" />
+                  Rate this customer
+                </CardTitle>
+                <CardDescription>
+                  One rating per order. Helps other laundries see customer reliability.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {existingCustomerReview ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+                    <span>
+                      You rated this customer {existingCustomerReview.rating} ★
+                      {existingCustomerReview.comment ? ` — "${existingCustomerReview.comment}"` : ''}
+                    </span>
+                  </div>
+                ) : (
+                  <>
+                    <div>
+                      <Label className="text-sm">Rating (1–5)</Label>
+                      <div className="flex items-center gap-1 mt-1">
+                        {[1, 2, 3, 4, 5].map((s) => (
+                          <button
+                            key={s}
+                            type="button"
+                            onClick={() => setCustomerRating(s)}
+                            className="p-1 rounded hover:bg-muted"
+                          >
+                            <Star
+                              className={`h-8 w-8 ${
+                                s <= customerRating ? 'fill-amber-400 text-amber-400' : 'text-muted'
+                              }`}
+                            />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <Label htmlFor="customer-review-comment" className="text-sm">Comment (optional)</Label>
+                      <Textarea
+                        id="customer-review-comment"
+                        placeholder="e.g. Great communication, on-time pickup"
+                        value={customerComment}
+                        onChange={(e) => setCustomerComment(e.target.value)}
+                        className="mt-1"
+                        rows={2}
+                      />
+                    </div>
+                    <Button
+                      onClick={handleSubmitCustomerReview}
+                      disabled={customerRating < 1 || submittingCustomerReview}
+                    >
+                      {submittingCustomerReview ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Submitting…
+                        </>
+                      ) : (
+                        'Submit rating'
+                      )}
+                    </Button>
+                  </>
+                )}
               </CardContent>
             </Card>
           )}
