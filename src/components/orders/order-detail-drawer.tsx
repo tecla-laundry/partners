@@ -181,10 +181,28 @@ export function OrderDetailDrawer({
         order_id: order.id,
         new_status: newStatus,
       })
-      toast.success(`Order status updated to ${newStatus.replace(/_/g, ' ')}`)
+      toast.success(newStatus === 'ready_for_delivery' ? 'Order completed. Driver requested for return.' : 'Order status updated')
       onStatusChange?.()
     } catch (error: any) {
       toast.error(error.message || 'Failed to update order status')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleRequestDriver = async (taskType: 'pickup' | 'delivery') => {
+    if (!order) return
+
+    setLoading(true)
+    try {
+      await callEdgeFunction('dispatch_driver', {
+        order_id: order.id,
+        task_type: taskType,
+      })
+      toast.success(`Driver requested for ${taskType === 'pickup' ? 'pickup' : 'return delivery'}`)
+      onStatusChange?.()
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to request driver')
     } finally {
       setLoading(false)
     }
@@ -272,7 +290,7 @@ export function OrderDetailDrawer({
             </CardContent>
           </Card>
 
-          {/* Order Items */}
+          {/* Order Items (no prices – pricing is from order totals) */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -298,17 +316,55 @@ export function OrderDetailDrawer({
                         <p className="text-sm text-muted-foreground">{item.description}</p>
                       )}
                     </div>
-                    <p className="font-medium">R{item.total_price.toFixed(2)}</p>
                   </div>
                 ))}
                 <div className="flex justify-between pt-2 border-t font-semibold">
                   <span>Total Weight:</span>
                   <span>{order.total_weight_kg} kg</span>
                 </div>
-                <div className="flex justify-between font-semibold">
-                  <span>Total Price:</span>
-                  <span>R{order.total_price.toFixed(2)}</span>
-                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Pricing (from order – same model as customer review) */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <DollarSign className="h-4 w-4" />
+                Pricing
+              </CardTitle>
+              <CardDescription>
+                Laundry fee (after commission), platform fee, and delivery fee for both legs.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Laundry fee (your share)</span>
+                <span>R{Number(order.service_fee ?? 0).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Commission (platform, from service)</span>
+                <span>R{Number(order.commission_amount ?? 0).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Platform fee</span>
+                <span>R{Number(order.platform_fee ?? 0).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Driver delivery fee (pickup leg)</span>
+                <span>R{((Number(order.pickup_fee ?? 0)) / 2).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Driver delivery fee (return leg)</span>
+                <span>R{((Number(order.pickup_fee ?? 0)) / 2).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between pt-2 border-t font-semibold">
+                <span>Total (customer paid)</span>
+                <span>R{Number(order.total_price ?? 0).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between pt-2 border-t text-primary font-semibold">
+                <span>Your earnings (laundry)</span>
+                <span>R{Number(order.service_fee ?? 0).toFixed(2)}</span>
               </div>
             </CardContent>
           </Card>
@@ -563,13 +619,38 @@ export function OrderDetailDrawer({
               </Button>
             )}
             {order.status === 'washing_in_progress' && (
+              <>
+                <Button
+                  onClick={() => handleStatusUpdate('ready_for_delivery')}
+                  disabled={loading}
+                  className="flex-1"
+                >
+                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                  Complete order &amp; request return driver
+                </Button>
+              </>
+            )}
+            {/* Request driver: pickup (when accepted, no driver yet) or return (when ready_for_delivery) */}
+            {['accepted', 'driver_pickup_assigned'].includes(order.status) && (
               <Button
-                onClick={() => handleStatusUpdate('ready_for_delivery')}
+                onClick={() => handleRequestDriver('pickup')}
                 disabled={loading}
+                variant="outline"
                 className="flex-1"
               >
-                <CheckCircle2 className="h-4 w-4 mr-2" />
-                Mark Ready for Delivery
+                <Truck className="h-4 w-4 mr-2" />
+                Request driver (pickup)
+              </Button>
+            )}
+            {order.status === 'ready_for_delivery' && (
+              <Button
+                onClick={() => handleRequestDriver('delivery')}
+                disabled={loading}
+                variant="outline"
+                className="flex-1"
+              >
+                <Truck className="h-4 w-4 mr-2" />
+                Request driver (return)
               </Button>
             )}
             {order.status === 'ready_for_delivery' && order.deliveries && (
