@@ -15,10 +15,20 @@ import {
 } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
 import { OrderDetailDrawer } from '@/components/orders/order-detail-drawer'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { createClient, callEdgeFunction } from '@/lib/supabase'
 import { Order, OrderStatus } from '@/lib/types'
 import { format } from 'date-fns'
-import { Eye, CheckCircle2 } from 'lucide-react'
+import { Eye, CheckCircle2, RefreshCw, Truck, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 const statusTabs: Record<string, OrderStatus[]> = {
@@ -82,6 +92,11 @@ export default function OrdersPage() {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [acceptingOrderId, setAcceptingOrderId] = useState<string | null>(null)
+  const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null)
+  const [requestingDriverOrderId, setRequestingDriverOrderId] = useState<string | null>(null)
+  const [rejectDialogOrder, setRejectDialogOrder] = useState<Order | null>(null)
+  const [rejectReason, setRejectReason] = useState('')
+  const [rejectingOrderId, setRejectingOrderId] = useState<string | null>(null)
   const supabase = createClient()
   const queryClient = useQueryClient()
 
@@ -91,8 +106,6 @@ export default function OrdersPage() {
     queryKey: ['orders', selectedTab, statuses],
     queryFn: () => fetchOrders(supabase, statuses),
   })
-
-  console.log("ORDERS", orders)
 
   const handleAcceptOrder = async (order: Order) => {
     if (order.status !== 'laundry_requested') return
@@ -152,6 +165,60 @@ export default function OrdersPage() {
   const handleOrderClick = (order: Order) => {
     setSelectedOrder(order)
     setDrawerOpen(true)
+  }
+
+  const handleStatusUpdate = async (order: Order, newStatus: 'washing_in_progress' | 'ready_for_delivery') => {
+    setUpdatingOrderId(order.id)
+    try {
+      await callEdgeFunction('update_order_status', {
+        order_id: order.id,
+        new_status: newStatus,
+      })
+      toast.success(newStatus === 'ready_for_delivery' ? 'Order marked ready. Driver requested for return.' : 'Order status updated')
+      await queryClient.invalidateQueries({ queryKey: ['orders'] })
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update order status')
+    } finally {
+      setUpdatingOrderId(null)
+    }
+  }
+
+  const handleRequestDriver = async (order: Order, taskType: 'pickup' | 'delivery') => {
+    setRequestingDriverOrderId(order.id)
+    try {
+      await callEdgeFunction('dispatch_driver', {
+        order_id: order.id,
+        task_type: taskType,
+      })
+      toast.success(`Driver requested for ${taskType === 'pickup' ? 'pickup' : 'return delivery'}`)
+      await queryClient.invalidateQueries({ queryKey: ['orders'] })
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to request driver')
+    } finally {
+      setRequestingDriverOrderId(null)
+    }
+  }
+
+  const hasReturnDriverAssigned = (order: Order) =>
+    order.deliveries?.some((d) => d.type === 'delivery' && d.driver_id) ?? false
+
+  const handleRejectOrder = async () => {
+    if (!rejectDialogOrder || !rejectReason.trim()) return
+    setRejectingOrderId(rejectDialogOrder.id)
+    try {
+      await callEdgeFunction('reject_order', {
+        order_id: rejectDialogOrder.id,
+        reason: rejectReason.trim(),
+      })
+      toast.success('Order rejected')
+      await queryClient.invalidateQueries({ queryKey: ['orders'] })
+      setRejectDialogOrder(null)
+      setRejectReason('')
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to reject order')
+    } finally {
+      setRejectingOrderId(null)
+    }
   }
 
   return (
@@ -241,16 +308,90 @@ export default function OrdersPage() {
                           {format(new Date(order.created_at), 'MMM d, yyyy')}
                         </TableCell>
                         <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-2">
+                          <div className="flex items-center justify-end gap-2 flex-wrap">
                             {order.status === 'laundry_requested' && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleAcceptOrder(order)}
+                                  disabled={acceptingOrderId === order.id}
+                                >
+                                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                                  {acceptingOrderId === order.id ? 'Accepting…' : 'Accept'}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setRejectDialogOrder(order)
+                                    setRejectReason('')
+                                  }}
+                                >
+                                  Reject
+                                </Button>
+                              </>
+                            )}
+                            {selectedTab === 'accepted' && ['accepted', 'driver_pickup_assigned'].includes(order.status) && (
                               <Button
                                 size="sm"
-                                onClick={() => handleAcceptOrder(order)}
-                                disabled={acceptingOrderId === order.id}
+                                variant="outline"
+                                onClick={() => handleRequestDriver(order, 'pickup')}
+                                disabled={requestingDriverOrderId === order.id}
                               >
-                                <CheckCircle2 className="h-4 w-4 mr-2" />
-                                {acceptingOrderId === order.id ? 'Accepting…' : 'Accept'}
+                                {requestingDriverOrderId === order.id ? (
+                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                ) : (
+                                  <Truck className="h-4 w-4 mr-2" />
+                                )}
+                                Request driver
                               </Button>
+                            )}
+                            {selectedTab === 'in-progress' && order.status === 'at_laundry' && (
+                              <Button
+                                size="sm"
+                                onClick={() => handleStatusUpdate(order, 'washing_in_progress')}
+                                disabled={updatingOrderId === order.id}
+                              >
+                                {updatingOrderId === order.id ? (
+                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                ) : (
+                                  <RefreshCw className="h-4 w-4 mr-2" />
+                                )}
+                                Start washing
+                              </Button>
+                            )}
+                            {selectedTab === 'in-progress' && order.status === 'washing_in_progress' && (
+                              <Button
+                                size="sm"
+                                onClick={() => handleStatusUpdate(order, 'ready_for_delivery')}
+                                disabled={updatingOrderId === order.id}
+                              >
+                                {updatingOrderId === order.id ? (
+                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                ) : (
+                                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                                )}
+                                Mark as ready
+                              </Button>
+                            )}
+                            {selectedTab === 'ready' && order.status === 'ready_for_delivery' && (
+                              hasReturnDriverAssigned(order) ? (
+                                <span className="text-sm text-muted-foreground">Driver requested</span>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleRequestDriver(order, 'delivery')}
+                                  disabled={requestingDriverOrderId === order.id}
+                                >
+                                  {requestingDriverOrderId === order.id ? (
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                  ) : (
+                                    <Truck className="h-4 w-4 mr-2" />
+                                  )}
+                                  Request driver
+                                </Button>
+                              )
                             )}
                             <Button
                               variant="ghost"
@@ -281,6 +422,52 @@ export default function OrdersPage() {
           setDrawerOpen(false)
         }}
       />
+
+      <Dialog open={!!rejectDialogOrder} onOpenChange={(open) => {
+        if (!open) {
+          setRejectDialogOrder(null)
+          setRejectReason('')
+        }
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reject order</DialogTitle>
+            <DialogDescription>
+              Please provide a reason for rejecting this order. The customer will be notified.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <Label htmlFor="table-reject-reason" className="sr-only">Rejection reason</Label>
+            <Textarea
+              id="table-reject-reason"
+              placeholder="e.g. Fully booked, cannot accommodate timeline"
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              rows={3}
+              className="resize-none"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectDialogOrder(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={!rejectReason.trim() || !!rejectingOrderId}
+              onClick={handleRejectOrder}
+            >
+              {rejectingOrderId ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Rejecting…
+                </>
+              ) : (
+                'Reject order'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

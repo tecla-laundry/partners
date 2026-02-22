@@ -8,6 +8,14 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from '@/components/ui/drawer'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -54,6 +62,8 @@ export function OrderDetailDrawer({
   const [customerComment, setCustomerComment] = useState('')
   const [existingCustomerReview, setExistingCustomerReview] = useState<{ rating: number; comment: string | null } | null>(null)
   const [submittingCustomerReview, setSubmittingCustomerReview] = useState(false)
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
+  const [rejectReason, setRejectReason] = useState('')
   const queryClient = useQueryClient()
 
   useEffect(() => {
@@ -255,7 +265,7 @@ export function OrderDetailDrawer({
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent className="max-h-[96vh] overflow-y-auto">
+      <DrawerContent className="max-h-[96vh] flex flex-col">
         <DrawerHeader>
           <DrawerTitle className="flex items-center justify-between">
             <span>Order #{order.id.slice(0, 8)}</span>
@@ -268,7 +278,7 @@ export function OrderDetailDrawer({
           </DrawerDescription>
         </DrawerHeader>
 
-        <div className="px-4 pb-4 space-y-4">
+        <div className="flex-1 overflow-y-auto min-h-0 px-4 pb-4 space-y-4">
           {/* Customer Info */}
           <Card>
             <CardHeader>
@@ -576,12 +586,7 @@ export function OrderDetailDrawer({
                   Accept Order
                 </Button>
                 <Button
-                  onClick={() => {
-                    const reason = prompt('Please provide a reason for rejection:')
-                    if (reason) {
-                      handleReject(reason)
-                    }
-                  }}
+                  onClick={() => setRejectDialogOpen(true)}
                   disabled={loading}
                   variant="destructive"
                   className="flex-1"
@@ -626,8 +631,9 @@ export function OrderDetailDrawer({
                   className="flex-1"
                 >
                   <CheckCircle2 className="h-4 w-4 mr-2" />
-                  Complete order &amp; request return driver
+                  Mark as ready for delivery
                 </Button>
+                <p className="text-xs text-muted-foreground w-full">This will also request a return driver.</p>
               </>
             )}
             {/* Request driver: pickup (when accepted, no driver yet) or return (when ready_for_delivery) */}
@@ -643,15 +649,22 @@ export function OrderDetailDrawer({
               </Button>
             )}
             {order.status === 'ready_for_delivery' && (
-              <Button
-                onClick={() => handleRequestDriver('delivery')}
-                disabled={loading}
-                variant="outline"
-                className="flex-1"
-              >
-                <Truck className="h-4 w-4 mr-2" />
-                Request driver (return)
-              </Button>
+              <>
+                <Button
+                  onClick={() => handleRequestDriver('delivery')}
+                  disabled={loading}
+                  variant="outline"
+                  className="flex-1"
+                >
+                  <Truck className="h-4 w-4 mr-2" />
+                  Request driver (return)
+                </Button>
+                {order.deliveries?.some((d) => d.type === 'delivery') && !order.deliveries?.some((d) => d.type === 'delivery' && d.driver_id) && (
+                  <p className="text-xs text-muted-foreground w-full">
+                    Driver request sent. Click again to re-request if no one accepted.
+                  </p>
+                )}
+              </>
             )}
             {order.status === 'ready_for_delivery' && order.deliveries && (
               <>
@@ -673,6 +686,48 @@ export function OrderDetailDrawer({
           </div>
         </div>
       </DrawerContent>
+
+      <Dialog open={rejectDialogOpen} onOpenChange={(open) => {
+        setRejectDialogOpen(open)
+        if (!open) setRejectReason('')
+      }}>
+        <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => e.preventDefault()}>
+          <DialogHeader>
+            <DialogTitle>Reject order</DialogTitle>
+            <DialogDescription>
+              Please provide a reason for rejecting this order. The customer will be notified.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <Label htmlFor="reject-reason" className="sr-only">Rejection reason</Label>
+            <Textarea
+              id="reject-reason"
+              placeholder="e.g. Fully booked, cannot accommodate timeline"
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              rows={3}
+              className="resize-none"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={!rejectReason.trim() || loading}
+              onClick={async () => {
+                if (!rejectReason.trim()) return
+                await handleReject(rejectReason.trim())
+                setRejectDialogOpen(false)
+                setRejectReason('')
+              }}
+            >
+              Reject order
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Drawer>
   )
 }
