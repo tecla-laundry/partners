@@ -48,19 +48,16 @@ export default function Home() {
       </header>
 
       <main className="flex-1">
-        {/* Hero with image */}
-        <section className="relative overflow-hidden border-b">
-          <div className="absolute inset-0 z-0">
-            <Image
-              src={HERO_IMAGE}
-              alt=""
-              fill
-              className="object-cover"
-              sizes="100vw"
-              priority
-            />
-            <div className="absolute inset-0 bg-navy-900/60" />
-          </div>
+        {/* Hero with image - use backgroundImage to avoid Next Image optimizer issues; gradient fallback */}
+        <section className="relative min-h-[420px] overflow-hidden border-b md:min-h-[50vh]">
+          <div
+            className="absolute inset-0 z-0 bg-cover bg-center"
+            style={{
+              backgroundImage: `url(${HERO_IMAGE})`,
+              backgroundColor: 'rgb(15 23 42)', /* navy-900 fallback if image fails */
+            }}
+          />
+          <div className="absolute inset-0 z-0 bg-navy-900/60" />
           <div className="container relative z-10 mx-auto flex flex-col items-center justify-center px-4 py-24 text-center md:py-32">
             <div className="mb-6 flex items-center gap-2 rounded-full border border-white/30 bg-white/10 px-4 py-2 backdrop-blur">
               <Sparkles className="h-4 w-4 text-white" />
